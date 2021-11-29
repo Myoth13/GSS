@@ -1,6 +1,6 @@
 ---
-title: "Statistical inference - GSS survey analysis for health inequity"
-subtitle: "Part 1 - Categorical data"
+title: "Statistical inference - GSS survey analysis: Part 1 - Categorical data"
+subtitle: "Health inequity trend"
 author: "Anna Loznevaia"
 date: "`r Sys.Date()`"
 output: 
@@ -38,15 +38,19 @@ library(reshape2)
 library(ggpubr)
 ```
 
+Part 2 - Inference on numerical data - gender pay gap
+<https://github.com/Myoth13/GSS/blob/main/GSS_income_diff.html>
+
 ### Load data
 
 I've uploaded a cross-sectional survey file from GSS web site
 [\<https://gss.norc.org/get-the-data/stata/\>](https://gss.norc.org/get-the-data/stata/){.uri}
-and loaded the data to DB (you can get the transfer script DB_transfer.R
-from my github account). For the purpose of replicability of this
-project I created three light separate data files which can be easily
-downloaded (script for extracting data - DB_extract.R) - two for the
-years prior 2021 (categorical and numerical inference) and one for the
+and loaded the data to a DB (transfer script
+<https://github.com/Myoth13/GSS/blob/main/DB_transfer.R>). For the
+purpose of replicability of this project I created three light separate
+data files which can be easily downloaded (script for extracting data -
+<https://github.com/Myoth13/GSS/blob/main/DB_extract.R>) - two for the
+years prior 2020 (categorical and numerical inference) and one for the
 year 2021.
 
 ```{r load-data}
@@ -282,31 +286,58 @@ t_2021 <-svytotal(~interaction(health,class),design=gss2021_design)
 ftable(t_2021, rownames=list(health=cols,class=rows))
 ```
 
-It's even worse after accounting for weights, so we can not use the chi
-squared test for the year 2021 separately.
+It's even worse after accounting for the weights, so we can not use the
+chi squared test for the year 2021 separately.
 
-### Health distribution by class and years
+### Health distribution trend
 
-```{r health_dist_class_year_all}
+```{r health_trend}
 
-#calculating percentages
-gss_srvyr_design <- gss_srvyr_design %>% 
-  group_by(year, class, health) %>% 
-  mutate(year_health_count = n()) %>% 
-  group_by(year,class) %>% 
-  mutate(proc_health_year = year_health_count/n())
+#calculating means for the graph
+out_health <- svyby(formula = ~health, 
+                    by = ~year + class, 
+                    design = gss_a_design, 
+                    FUN = svymean,
+                    na.rm = TRUE
+)
 
-gss_srvyr_design %>% 
-  ggsurvey() + 
-  aes(x = year,y=proc_health_year,color=health) + 
-  geom_smooth(size=1) +
-  facet_wrap(~class) + 
-  theme_light() + 
-  scale_color_brewer(palette = "Set1") +
-  labs(y="Health proportion", x="")
+#wide to long format
+colnames(out_health) <- c("year","class","Excellent","Good","Fair","Poor")
+out_health <- melt(out_health[,c("year","class","Excellent","Good","Fair","Poor")],
+                   id=c("year","class"))
+colnames(out_health) <- c("year","class","health","p")
+
+#calculating means for the graph
+out_health2021 <- svyby(formula = ~health, 
+                    by = ~class, 
+                    design = gss2021_design, 
+                    FUN = svymean,
+                    na.rm = TRUE
+)
+
+#wide to long format
+colnames(out_health2021) <- c("class","Excellent","Good","Fair","Poor")
+out_health2021 <- melt(out_health2021[,c("class","Excellent","Good","Fair","Poor")],
+                       id=c("class"))
+colnames(out_health2021) <- c("class","health","p")
+out_health2021$year <- 2021
+
+#combining all years
+out_health_tot <- rbind(out_health, out_health2021)
+
+out_health_tot %>% 
+  ggplot() +
+    aes(x=year, y=p, color=health) +
+    geom_line() + 
+    geom_point() +
+    theme_light()+
+    scale_color_brewer(palette = "Set1") +
+    labs(y="proportion") +
+    theme(axis.title.x=element_blank()) + 
+    facet_wrap(~class)
 ```
 
-**Health distribution by class 2021**
+### Health distribution in 2021
 
 ```{r health_dist_class_2021, fig.height=3, fig.width=9}
 
@@ -363,10 +394,12 @@ mean_tab <- svyby( formula = ~health,
                    na.rm = TRUE )
 
 #plot friendly dataset - from wide to long 
-
-colnames(mean_tab) <- c("class","excellent","good","fair","poor","se.excellent","se.good","se.fair","se.poor")
-dm1 <- melt(mean_tab[,c("class","excellent","good","fair","poor")], id=c("class"))
-dm2 <- melt(mean_tab[,c("class","se.excellent","se.good","se.fair","se.poor")], id=c("class"))
+colnames(mean_tab) <- c("class","excellent","good","fair","poor",
+                        "se.excellent","se.good","se.fair","se.poor")
+dm1 <- melt(mean_tab[,c("class","excellent","good","fair","poor")], 
+            id=c("class"))
+dm2 <- melt(mean_tab[,c("class","se.excellent","se.good","se.fair","se.poor")], 
+            id=c("class"))
 colnames(dm1) <- c("class", "health", "p")
 dm2$variable <- str_replace(dm2$variable, "se.", "")
 colnames(dm2) <- c("class", "health", "se")
@@ -378,7 +411,7 @@ mean_tab
 ```
 
 ```{r health_class_mean_CI}
-# Construct a bar plot of average income by sex
+
 mean_tab %>% 
   ggplot() +
     aes(x = health, y = p, ymin = p_l, ymax = p_h, fill = health) +
@@ -393,7 +426,7 @@ mean_tab %>%
         axis.ticks.x=element_blank())
 ```
 
-### Statistic yearly dynamic
+### Statistic trend
 
 This data isn't very reliable because some groups has less then 5
 observations but it is anyway interesting to look at. For each year I

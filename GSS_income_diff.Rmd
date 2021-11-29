@@ -1,6 +1,6 @@
 ---
-title: "Statistical inference - GSS survey analysis for income difference"
-subtitle: "Part 2 - Numerical data"
+title: "Statistical inference - GSS survey analysis: Part 2 - Numerical data"
+subtitle: "Gender pay gap"
 author: "Anna Loznevaia"
 date: "`r Sys.Date()`"
 output: 
@@ -41,15 +41,19 @@ library(questionr)
 library(scales)
 ```
 
+Part 1 - Inference on categorical data - health inequity 2021
+<https://github.com/Myoth13/GSS/blob/main/GSS_health_inequity_2021.html>
+
 ### Load data
 
 I've uploaded a cross-sectional survey file from GSS web site
-[\<https://gss.norc.org/get-the-data/stata/\>](https://gss.norc.org/get-the-data/stata/){.uri}
-and loaded the data to DB (you can get the transfer script DB_transfer.R
-from my github account). For the purpose of replicability of this
-project I created three light separate data files which can be easily
-downloaded (script for extracting data - DB_extract.R) - two for the
-years prior 2021 (categorical and numerical inference) and one for the
+[<https://gss.norc.org/get-the-data/stata/>](https://gss.norc.org/get-the-data/stata/){.uri}
+and loaded the data to a DB (transfer script
+<https://github.com/Myoth13/GSS/blob/main/DB_transfer.R>). For the
+purpose of replicability of this project I created three light separate
+data files which can be easily downloaded (script for extracting data -
+<https://github.com/Myoth13/GSS/blob/main/DB_extract.R>) - two for the
+years prior 2020 (categorical and numerical inference) and one for the
 year 2021.
 
 ```{r load-data}
@@ -228,7 +232,7 @@ gss_num %>%
   scale_x_continuous(labels = comma)
 ```
 
-There is a noticeable difference in weighted and unweighted
+There is a noticeable difference between weighted and unweighted
 distribution. Without accounting for this difference results will be
 biased and variance calculated incorrectly, which can result in the
 wrong inference.
@@ -304,7 +308,7 @@ out_s <- svyby(formula = ~conrinc,
                     ci=TRUE, vartype="ci"
 )
 
-# Construct a bar plot of average income by sex
+# Construct a bar plot of average income by gender
 out_s %>% 
   ggplot() +
     aes(x = sex, y = conrinc, ymin = ci_l, ymax = ci_u, fill = sex) +
@@ -496,7 +500,7 @@ $\mu_{male} = \mu_{female}$
 H~1~: there is a difference between mean income of males and females
 $\mu_{male} \neq \mu_{female}$
 
-```{r}
+```{r ttest}
 ##Inference for quantitative data ###Survey-weighted t-test
 svyttest(formula = conrinc~sex,
          design = gss_num_design)
@@ -518,7 +522,7 @@ To extract ANOVA table from survey design based model I have to use GLM
 model first.
 
 ```{r conrinc_degree_anov_surv}
-# Extracting ANOVA table for income by degree and sex
+# Extracting ANOVA table for income by degree and gender
 gss.glm1 <- svyglm(conrinc~sex+degree+race+class+age_group, design=gss_num_design)
 atable <- anova(gss.glm1)
 atable

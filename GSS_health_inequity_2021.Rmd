@@ -357,6 +357,15 @@ gss_srvyr_design %>%
 
 ### Chi squared
 
+Both variables are categorical with more than two levels. Actually this
+variables are ordinal and ordinal regression can be used according to
+<http://rcompanion.org/handbook/E_01.html> But I will leave it for the
+next time.
+
+For the 2021 dataset I would like to try bootstrap technique, because
+number of observations is too small, but I also will leave it for the
+next time.
+
 Condition for inference using chi squared is satisfied only for the main
 dataset:
 
@@ -379,7 +388,9 @@ chi
 ```
 
 P-value is almost zero which allow us to reject H~0~ and conclude that
-distribution of health is not independent of the class
+distribution of health is not independent of the class. We can not
+compare directly with CI method, but on the graph below we can see that
+the estimated proportion distribution is very distinct.
 
 ### Mean + CI
 
@@ -425,6 +436,10 @@ mean_tab %>%
         axis.text.x=element_blank(),
         axis.ticks.x=element_blank())
 ```
+
+There is a huge difference between level of poor health in the lower
+class and other classes. Excellent to good ratio is going up from
+working to upper class steadily.
 
 ### Statistic trend
 
@@ -510,7 +525,14 @@ f_all %>%
       position = position_nudge(x = 1,y = -1),  
       size=3
     ) 
+
 ```
+
+In order to put them on one graph I scaled all except chisqured by 2. In
+all variants there is a big jump in the year 2021, which is more
+noticeable in chisquared, but on the graph in [Health distribution
+trend] I can not see particular strong relations - additional research
+needed.
 
 ------------------------------------------------------------------------
 

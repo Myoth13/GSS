@@ -163,6 +163,10 @@ Creating a survey design object using instructions from codebook:
 
 ```{r design_gss}
 
+#scaling weights to US population size
+gss$wtssall_scaled <- gss$wtssall * 258000000 / nrow( gss )
+gss2021$wtssnrps_scaled <- gss2021$wtssnrps * 258000000 / nrow( gss2021 )
+
 #for years prior 2021
 gss_a_design <-svydesign(id = ~vpsu, 
                            strata = ~vstrat, 
@@ -170,7 +174,7 @@ gss_a_design <-svydesign(id = ~vpsu,
                                          !is.na(class) & 
                                          class!="no class" & 
                                          !is.na(health)), 
-                           weights = ~wtssall, 
+                           weights = ~wtssall_scaled, 
                            nest = TRUE)
 
 #removing empty label for class = "no class"
@@ -183,7 +187,7 @@ gss2021_design <-svydesign(id = ~vpsu,
                                          !is.na(class) & 
                                          class!="no class" & 
                                          !is.na(health)), 
-                           weights = ~wtssnrps, 
+                           weights = ~wtssnrps_scaled, 
                            nest = TRUE)
 
 #requred for this particular design
@@ -260,8 +264,6 @@ We can notice that there are not enough observations in the upper-class
 
 #### Design weighted tables
 
-We can see the difference with the original counts from the raw tables
-
 **Contingency table for the main dataset**
 
 ```{r health_class_des}
@@ -286,8 +288,9 @@ t_2021 <-svytotal(~interaction(health,class),design=gss2021_design)
 ftable(t_2021, rownames=list(health=cols,class=rows))
 ```
 
-It's even worse after accounting for the weights, so we can not use the
-chi squared test for the year 2021 separately.
+After applying weights number of observations is obviously became large
+enough, but I'm not sure about how legitimate is to use this logic - so
+I will chose a conservative option.
 
 ### Health distribution trend
 
@@ -362,11 +365,11 @@ variables are ordinal and ordinal regression can be used according to
 <http://rcompanion.org/handbook/E_01.html> But I will leave it for the
 next time.
 
-For the 2021 dataset I would like to try bootstrap technique, because
-number of observations is too small, but I also will leave it for the
-next time.
+For the 2021 dataset I would like to try bootstrap or other technique,
+because number of observations is small, but I also will leave it for
+the next time.
 
-Condition for inference using chi squared is satisfied only for the main
+Condition for inference using chi squared is satisfied for the main
 dataset:
 
 -   independence - observations are independent between and within the

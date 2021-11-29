@@ -182,6 +182,9 @@ gss_num %>%
 
 ```{r desing_num}
 
+#scaling weights to US population size
+gss_num$wtssall_scaled <- gss_num$wtssall * 258000000 / nrow( gss_num )
+
 gss_num_design <-svydesign(id = ~vpsu, 
                            strata = ~vstrat, 
                            data = subset(gss_num, !is.na(conrinc) & year!=2010

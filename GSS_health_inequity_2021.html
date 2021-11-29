@@ -11,7 +11,7 @@
 
 <meta name="author" content="Anna Loznevaia" />
 
-<meta name="date" content="2021-11-29" />
+<meta name="date" content="2021-11-30" />
 
 <title>Statistical inference - GSS survey analysis: Part 1 - Categorical data</title>
 
@@ -354,7 +354,7 @@ div.tocify {
 <h1 class="title toc-ignore">Statistical inference - GSS survey analysis: Part 1 - Categorical data</h1>
 <h3 class="subtitle">Health inequity trend</h3>
 <h4 class="author">Anna Loznevaia</h4>
-<h4 class="date">2021-11-29</h4>
+<h4 class="date">2021-11-30</h4>
 
 </div>
 
@@ -421,31 +421,35 @@ div.tocify {
 <h2>Part 3: Exploratory data analysis</h2>
 <p>Creating a survey design object using instructions from codebook:</p>
 <p><code>cluster VPSU; strata VSTRAT; weight WTSSPS /* For years before 2021, use WTSSALL or WTSSNR */;</code></p>
-<div class="sourceCode" id="cb3"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb3-1"><a href="#cb3-1" aria-hidden="true" tabindex="-1"></a><span class="co">#for years prior 2021</span></span>
-<span id="cb3-2"><a href="#cb3-2" aria-hidden="true" tabindex="-1"></a>gss_a_design <span class="ot">&lt;-</span><span class="fu">svydesign</span>(<span class="at">id =</span> <span class="sc">~</span>vpsu, </span>
-<span id="cb3-3"><a href="#cb3-3" aria-hidden="true" tabindex="-1"></a>                           <span class="at">strata =</span> <span class="sc">~</span>vstrat, </span>
-<span id="cb3-4"><a href="#cb3-4" aria-hidden="true" tabindex="-1"></a>                           <span class="at">data =</span> <span class="fu">subset</span>(gss, </span>
-<span id="cb3-5"><a href="#cb3-5" aria-hidden="true" tabindex="-1"></a>                                         <span class="sc">!</span><span class="fu">is.na</span>(class) <span class="sc">&amp;</span> </span>
-<span id="cb3-6"><a href="#cb3-6" aria-hidden="true" tabindex="-1"></a>                                         class<span class="sc">!=</span><span class="st">&quot;no class&quot;</span> <span class="sc">&amp;</span> </span>
-<span id="cb3-7"><a href="#cb3-7" aria-hidden="true" tabindex="-1"></a>                                         <span class="sc">!</span><span class="fu">is.na</span>(health)), </span>
-<span id="cb3-8"><a href="#cb3-8" aria-hidden="true" tabindex="-1"></a>                           <span class="at">weights =</span> <span class="sc">~</span>wtssall, </span>
-<span id="cb3-9"><a href="#cb3-9" aria-hidden="true" tabindex="-1"></a>                           <span class="at">nest =</span> <span class="cn">TRUE</span>)</span>
-<span id="cb3-10"><a href="#cb3-10" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb3-11"><a href="#cb3-11" aria-hidden="true" tabindex="-1"></a><span class="co">#removing empty label for class = &quot;no class&quot;</span></span>
-<span id="cb3-12"><a href="#cb3-12" aria-hidden="true" tabindex="-1"></a>gss_a_design <span class="ot">&lt;-</span> <span class="fu">update</span>(gss_a_design,<span class="at">class=</span><span class="fu">droplevels</span>(class))</span>
-<span id="cb3-13"><a href="#cb3-13" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb3-14"><a href="#cb3-14" aria-hidden="true" tabindex="-1"></a><span class="co">#for 2021</span></span>
-<span id="cb3-15"><a href="#cb3-15" aria-hidden="true" tabindex="-1"></a>gss2021_design <span class="ot">&lt;-</span><span class="fu">svydesign</span>(<span class="at">id =</span> <span class="sc">~</span>vpsu, </span>
-<span id="cb3-16"><a href="#cb3-16" aria-hidden="true" tabindex="-1"></a>                           <span class="at">strata =</span> <span class="sc">~</span>vstrat, </span>
-<span id="cb3-17"><a href="#cb3-17" aria-hidden="true" tabindex="-1"></a>                           <span class="at">data =</span> <span class="fu">subset</span>(gss2021, </span>
-<span id="cb3-18"><a href="#cb3-18" aria-hidden="true" tabindex="-1"></a>                                         <span class="sc">!</span><span class="fu">is.na</span>(class) <span class="sc">&amp;</span> </span>
-<span id="cb3-19"><a href="#cb3-19" aria-hidden="true" tabindex="-1"></a>                                         class<span class="sc">!=</span><span class="st">&quot;no class&quot;</span> <span class="sc">&amp;</span> </span>
-<span id="cb3-20"><a href="#cb3-20" aria-hidden="true" tabindex="-1"></a>                                         <span class="sc">!</span><span class="fu">is.na</span>(health)), </span>
-<span id="cb3-21"><a href="#cb3-21" aria-hidden="true" tabindex="-1"></a>                           <span class="at">weights =</span> <span class="sc">~</span>wtssnrps, </span>
-<span id="cb3-22"><a href="#cb3-22" aria-hidden="true" tabindex="-1"></a>                           <span class="at">nest =</span> <span class="cn">TRUE</span>)</span>
-<span id="cb3-23"><a href="#cb3-23" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb3-24"><a href="#cb3-24" aria-hidden="true" tabindex="-1"></a><span class="co">#requred for this particular design</span></span>
-<span id="cb3-25"><a href="#cb3-25" aria-hidden="true" tabindex="-1"></a><span class="fu">options</span>(<span class="at">survey.lonely.psu=</span><span class="st">&quot;remove&quot;</span>)</span></code></pre></div>
+<div class="sourceCode" id="cb3"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb3-1"><a href="#cb3-1" aria-hidden="true" tabindex="-1"></a><span class="co">#scaling weights to US population size</span></span>
+<span id="cb3-2"><a href="#cb3-2" aria-hidden="true" tabindex="-1"></a>gss<span class="sc">$</span>wtssall_scaled <span class="ot">&lt;-</span> gss<span class="sc">$</span>wtssall <span class="sc">*</span> <span class="dv">258000000</span> <span class="sc">/</span> <span class="fu">nrow</span>( gss )</span>
+<span id="cb3-3"><a href="#cb3-3" aria-hidden="true" tabindex="-1"></a>gss2021<span class="sc">$</span>wtssnrps_scaled <span class="ot">&lt;-</span> gss2021<span class="sc">$</span>wtssnrps <span class="sc">*</span> <span class="dv">258000000</span> <span class="sc">/</span> <span class="fu">nrow</span>( gss2021 )</span>
+<span id="cb3-4"><a href="#cb3-4" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb3-5"><a href="#cb3-5" aria-hidden="true" tabindex="-1"></a><span class="co">#for years prior 2021</span></span>
+<span id="cb3-6"><a href="#cb3-6" aria-hidden="true" tabindex="-1"></a>gss_a_design <span class="ot">&lt;-</span><span class="fu">svydesign</span>(<span class="at">id =</span> <span class="sc">~</span>vpsu, </span>
+<span id="cb3-7"><a href="#cb3-7" aria-hidden="true" tabindex="-1"></a>                           <span class="at">strata =</span> <span class="sc">~</span>vstrat, </span>
+<span id="cb3-8"><a href="#cb3-8" aria-hidden="true" tabindex="-1"></a>                           <span class="at">data =</span> <span class="fu">subset</span>(gss, </span>
+<span id="cb3-9"><a href="#cb3-9" aria-hidden="true" tabindex="-1"></a>                                         <span class="sc">!</span><span class="fu">is.na</span>(class) <span class="sc">&amp;</span> </span>
+<span id="cb3-10"><a href="#cb3-10" aria-hidden="true" tabindex="-1"></a>                                         class<span class="sc">!=</span><span class="st">&quot;no class&quot;</span> <span class="sc">&amp;</span> </span>
+<span id="cb3-11"><a href="#cb3-11" aria-hidden="true" tabindex="-1"></a>                                         <span class="sc">!</span><span class="fu">is.na</span>(health)), </span>
+<span id="cb3-12"><a href="#cb3-12" aria-hidden="true" tabindex="-1"></a>                           <span class="at">weights =</span> <span class="sc">~</span>wtssall_scaled, </span>
+<span id="cb3-13"><a href="#cb3-13" aria-hidden="true" tabindex="-1"></a>                           <span class="at">nest =</span> <span class="cn">TRUE</span>)</span>
+<span id="cb3-14"><a href="#cb3-14" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb3-15"><a href="#cb3-15" aria-hidden="true" tabindex="-1"></a><span class="co">#removing empty label for class = &quot;no class&quot;</span></span>
+<span id="cb3-16"><a href="#cb3-16" aria-hidden="true" tabindex="-1"></a>gss_a_design <span class="ot">&lt;-</span> <span class="fu">update</span>(gss_a_design,<span class="at">class=</span><span class="fu">droplevels</span>(class))</span>
+<span id="cb3-17"><a href="#cb3-17" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb3-18"><a href="#cb3-18" aria-hidden="true" tabindex="-1"></a><span class="co">#for 2021</span></span>
+<span id="cb3-19"><a href="#cb3-19" aria-hidden="true" tabindex="-1"></a>gss2021_design <span class="ot">&lt;-</span><span class="fu">svydesign</span>(<span class="at">id =</span> <span class="sc">~</span>vpsu, </span>
+<span id="cb3-20"><a href="#cb3-20" aria-hidden="true" tabindex="-1"></a>                           <span class="at">strata =</span> <span class="sc">~</span>vstrat, </span>
+<span id="cb3-21"><a href="#cb3-21" aria-hidden="true" tabindex="-1"></a>                           <span class="at">data =</span> <span class="fu">subset</span>(gss2021, </span>
+<span id="cb3-22"><a href="#cb3-22" aria-hidden="true" tabindex="-1"></a>                                         <span class="sc">!</span><span class="fu">is.na</span>(class) <span class="sc">&amp;</span> </span>
+<span id="cb3-23"><a href="#cb3-23" aria-hidden="true" tabindex="-1"></a>                                         class<span class="sc">!=</span><span class="st">&quot;no class&quot;</span> <span class="sc">&amp;</span> </span>
+<span id="cb3-24"><a href="#cb3-24" aria-hidden="true" tabindex="-1"></a>                                         <span class="sc">!</span><span class="fu">is.na</span>(health)), </span>
+<span id="cb3-25"><a href="#cb3-25" aria-hidden="true" tabindex="-1"></a>                           <span class="at">weights =</span> <span class="sc">~</span>wtssnrps_scaled, </span>
+<span id="cb3-26"><a href="#cb3-26" aria-hidden="true" tabindex="-1"></a>                           <span class="at">nest =</span> <span class="cn">TRUE</span>)</span>
+<span id="cb3-27"><a href="#cb3-27" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb3-28"><a href="#cb3-28" aria-hidden="true" tabindex="-1"></a><span class="co">#requred for this particular design</span></span>
+<span id="cb3-29"><a href="#cb3-29" aria-hidden="true" tabindex="-1"></a><span class="fu">options</span>(<span class="at">survey.lonely.psu=</span><span class="st">&quot;remove&quot;</span>)</span></code></pre></div>
 <p>I’m going to create object using <code>srvyr</code> library to use lazy tidyverse syntax whenever I want to</p>
 <div class="sourceCode" id="cb4"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb4-1"><a href="#cb4-1" aria-hidden="true" tabindex="-1"></a>gss_srvyr_design <span class="ot">&lt;-</span> <span class="fu">as_survey</span>(gss_a_design)</span>
 <span id="cb4-2"><a href="#cb4-2" aria-hidden="true" tabindex="-1"></a>gss2021_srvyr_design <span class="ot">&lt;-</span> <span class="fu">as_survey</span>(gss2021_design)</span></code></pre></div>
@@ -503,7 +507,6 @@ div.tocify {
 </div>
 <div id="design-weighted-tables" class="section level4">
 <h4>Design weighted tables</h4>
-<p>We can see the difference with the original counts from the raw tables</p>
 <p><strong>Contingency table for the main dataset</strong></p>
 <div class="sourceCode" id="cb10"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb10-1"><a href="#cb10-1" aria-hidden="true" tabindex="-1"></a><span class="co">#header for contingency table</span></span>
 <span id="cb10-2"><a href="#cb10-2" aria-hidden="true" tabindex="-1"></a>gss_s <span class="ot">&lt;-</span> <span class="fu">subset</span>(gss, <span class="at">select=</span><span class="fu">c</span>(class,health), <span class="sc">!</span><span class="fu">is.na</span>(class) <span class="sc">&amp;</span> class<span class="sc">!=</span><span class="st">&quot;no class&quot;</span>)</span>
@@ -516,29 +519,29 @@ div.tocify {
 <span id="cb10-9"><a href="#cb10-9" aria-hidden="true" tabindex="-1"></a><span class="fu">ftable</span>(t_a, <span class="at">rownames=</span><span class="fu">list</span>(<span class="at">health=</span>cols,<span class="at">class=</span>rows))</span></code></pre></div>
 <pre><code>##                     health   excellent        good        fair        poor
 ## class                                                                     
-## lower class   total         331.834761  767.336777  655.337633  380.565737
-##               SE             21.377076   31.640682   28.783860   20.121608
-## working class total        4941.600895 9400.337937 3870.687092  933.537341
-##               SE             83.695076  119.776031   74.873350   34.017661
-## middle class  total        6700.973290 8373.464063 2886.754454  738.267814
-##               SE            106.819177  112.534055   60.023349   29.631796
-## upper class   total         626.665854  468.420789  163.645561   50.180668
-##               SE             30.356248   25.090297   14.169166    7.502701</code></pre>
+## lower class   total         1539476.52  3559895.14  3040299.02  1765553.48
+##               SE              99174.38   146790.19   133536.57    93349.90
+## working class total        22925502.25 43610860.74 17957226.31  4330947.17
+##               SE             388285.44   555675.32   347358.92   157817.68
+## middle class  total        31087734.82 38846898.66 13392480.92  3425035.89
+##               SE             495564.76   522077.72   278465.51   137470.39
+## upper class   total         2907282.43  2173138.24   759198.64   232802.49
+##               SE             140831.33   116401.07    65734.82    34807.18</code></pre>
 <p><strong>Contingency table for 2021</strong></p>
 <div class="sourceCode" id="cb12"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb12-1"><a href="#cb12-1" aria-hidden="true" tabindex="-1"></a><span class="co">#creating new tables with counts</span></span>
 <span id="cb12-2"><a href="#cb12-2" aria-hidden="true" tabindex="-1"></a>t_2021 <span class="ot">&lt;-</span><span class="fu">svytotal</span>(<span class="sc">~</span><span class="fu">interaction</span>(health,class),<span class="at">design=</span>gss2021_design)</span>
 <span id="cb12-3"><a href="#cb12-3" aria-hidden="true" tabindex="-1"></a><span class="fu">ftable</span>(t_2021, <span class="at">rownames=</span><span class="fu">list</span>(<span class="at">health=</span>cols,<span class="at">class=</span>rows))</span></code></pre></div>
 <pre><code>##                     health   excellent        good        fair        poor
 ## class                                                                     
-## lower class   total          39.630785  160.233464  147.294164   59.871578
-##               SE              7.870965   16.492895   16.793858   10.165253
-## working class total         265.216970  981.719684  421.246475   50.893506
-##               SE             22.046481   39.157986   25.145939    8.271030
-## middle class  total         418.537845 1024.247950  258.971428   42.486159
-##               SE             22.719156   34.077520   20.806823    7.603871
-## upper class   total          61.731188   71.302171    7.819915    2.025633
-##               SE              8.290082    9.595810    4.297758    1.221913</code></pre>
-<p>It’s even worse after accounting for the weights, so we can not use the chi squared test for the year 2021 separately.</p>
+## lower class   total         2535898.45 10253034.18  9425072.97  3831068.23
+##               SE             503648.07  1055348.92  1074606.97   650455.19
+## working class total        16970728.75 62818372.67 26954759.58  3256578.51
+##               SE            1410712.30  2505644.91  1609040.74   529247.48
+## middle class  total        26781439.46 65539675.40 16571088.39  2718608.37
+##               SE            1453755.49  2180555.59  1331388.99   486557.23
+## upper class   total         3950061.14  4562490.08   500381.46   129616.37
+##               SE             530466.58   614017.63   275005.35    78187.87</code></pre>
+<p>After applying weights number of observations is obviously became large enough, but I’m not sure about how legitimate is to use this logic - so I will chose a conservative option.</p>
 </div>
 </div>
 <div id="health-distribution-trend" class="section level3">
@@ -606,8 +609,8 @@ div.tocify {
 <div id="chi-squared" class="section level3">
 <h3>Chi squared</h3>
 <p>Both variables are categorical with more than two levels. Actually this variables are ordinal and ordinal regression can be used according to <a href="http://rcompanion.org/handbook/E_01.html" class="uri">http://rcompanion.org/handbook/E_01.html</a> But I will leave it for the next time.</p>
-<p>For the 2021 dataset I would like to try bootstrap technique, because number of observations is too small, but I also will leave it for the next time.</p>
-<p>Condition for inference using chi squared is satisfied only for the main dataset:</p>
+<p>For the 2021 dataset I would like to try bootstrap or other technique, because number of observations is small, but I also will leave it for the next time.</p>
+<p>Condition for inference using chi squared is satisfied for the main dataset:</p>
 <ul>
 <li><p>independence - observations are independent between and within the groups, data is not paired (from GSS survey design), sample size &lt;10% of the population</p></li>
 <li><p>number of observations in each of the groups &gt;5.</p></li>

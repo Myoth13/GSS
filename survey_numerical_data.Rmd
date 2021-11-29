@@ -1,0 +1,152 @@
+---
+title: "Survey - numerical data"
+output: html_notebook
+---
+
+Survey design - (cluster VPSU; strata VSTRAT; weight WTSSPS /\* For years before 2021, use WTSSALL or WTSSNR \*/;)
+
+```{r message = FALSE}
+library(dplyr)
+library(ggplot2)
+library(survey)
+library(questionr)
+
+load("gss_num.RData")
+
+gss_num_design <-svydesign(id = ~vpsu, 
+                           strata = ~vstrat, 
+                           data = subset(gss_num, !is.na(conrinc) & year!=2010), 
+                           weights = ~wtssall, 
+                           nest = TRUE)
+
+#requred for this particular design
+options(survey.lonely.psu="remove")
+
+head(gss_num_design)
+```
+
+Estimated population size. In this case weights are scaled to sample size
+
+```{r}
+gss_num %>% 
+  summarize(N_hat = sum(wtssall))
+```
+
+Number of strata
+
+```{r}
+gss_num %>%
+  summarize(n_strata = n_distinct(vstrat))
+```
+
+Number of clusters
+
+```{r}
+gss_num %>%
+  summarize(n_clusters = n_distinct(vstrat,vpsu))
+```
+
+Sample sizes in clusters
+
+```{r}
+gss_num %>%
+  count(vstrat,vpsu)
+```
+
+Distribution of income by sex (weights scaling)
+
+```{r}
+gss_num %>%
+  filter(!is.na(conrinc)) %>%
+  group_by(sex) %>%
+  mutate(wtssall_std = wtssall/sum(wtssall)) %>%
+  ggplot() + 
+    aes(x = conrinc, weight = wtssall_std) + 
+    geom_histogram(binwidth = 1000,  fill = "magenta") +
+    labs(x = "Income") + 
+    facet_wrap(~sex, labeller = "label_both", scales = "free")
+```
+
+Distribution of income by sex (using questionr)
+
+```{r}
+gss_num_design %>%  
+  ggsurvey() + 
+    aes(x = conrinc) + 
+    geom_density(bw = 0.6,  color = "gold") +
+    labs(x = "Income") + 
+    facet_wrap(~sex, labeller = "label_both", scales = "free")
+```
+
+Boxplot of the distribution
+
+```{r}
+gss_num_design %>%  
+  ggsurvey() + 
+  aes(x = conrinc, y = sex) + 
+  geom_boxplot() 
+```
+
+Compute the survey-weighted mean
+
+```{r}
+svymean(x = ~conrinc, 
+        design = gss_num_design,
+        na.rm = TRUE)
+```
+
+Compute the survey-weighted mean by sex
+
+```{r}
+svyby(formula = ~conrinc, 
+      by = ~sex, 
+      design = gss_num_design, 
+      FUN = svymean, 
+      na.rm = TRUE)
+```
+
+Compute the survey-weighted quantiles
+
+```{r}
+svyquantile(x = ~conrinc, 
+            design = gss_num_design, 
+            na.rm = TRUE, 
+            quantiles = c(0.01, 0.25, 0.5, 0.75,0.99))
+```
+
+Compute the survey-weighted medians by sex
+
+```{r}
+svyby(formula = ~sex+conrinc, 
+      by = ~sex, 
+      design = gss_num_design, 
+      FUN = svyquantile, 
+      na.rm = TRUE, 
+      quantiles = 0.5
+) 
+```
+
+Construct a bar plot of average income by sex
+
+```{r}
+# Compute the survey-weighted mean by degree
+out_mean <- svyby(formula = ~conrinc, 
+                    by = ~sex+year, 
+                    design = gss_num_design, 
+                    FUN = svymean,
+                    na.rm = TRUE)
+
+# Add lower and upper columns to out
+out_mean <- out_mean %>%  
+  mutate(lower = conrinc - 1.96*se, 
+         upper = conrinc + 1.96*se)
+
+# Construct a bar plot of average income by degree with error bars
+out_mean %>% 
+  ggplot()+ 
+    aes(x = sex, y = conrinc, ymin = lower, ymax = upper) +
+    geom_col(fill = "gold") +
+    labs(y = "Average income") +
+    geom_errorbar(width = 0.7) + 
+    facet_wrap(~year)
+```

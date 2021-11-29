@@ -1,0 +1,535 @@
+---
+title: "Statistical inference - GSS survey analysis for income difference"
+subtitle: "Part 2 - Numerical data"
+author: "Anna Loznevaia"
+date: "`r Sys.Date()`"
+output: 
+    html_document:
+      theme: journal
+      highlight: tango
+      toc: true
+      toc_float:
+        collapsed: false
+        smooth_scroll: true
+      toc_depth: 6
+      fig_width: 9
+      fig_height: 7
+      fig_caption: true
+bibliography: references.bib
+link-citations: true
+editor_options: 
+  markdown: 
+    wrap: 72
+---
+
+```{r}
+
+knitr::opts_chunk$set( warning=FALSE, message=FALSE)
+```
+
+## Setup
+
+### Load packages
+
+```{r load-packages, warnings = FALSE}
+library(ggplot2)
+library(dplyr)
+library(tidyr)
+library(survey)
+library(srvyr)
+library(questionr)
+library(scales)
+```
+
+### Load data
+
+I've uploaded a cross-sectional survey file from GSS web site
+[\<https://gss.norc.org/get-the-data/stata/\>](https://gss.norc.org/get-the-data/stata/){.uri}
+and loaded the data to DB (you can get the transfer script DB_transfer.R
+from my github account). For the purpose of replicability of this
+project I created three light separate data files which can be easily
+downloaded (script for extracting data - DB_extract.R) - two for the
+years prior 2021 (categorical and numerical inference) and one for the
+year 2021.
+
+```{r load-data}
+load("gss_num.RData")
+```
+
+------------------------------------------------------------------------
+
+## Part 1: Data
+
+The General Social Survey (GSS) is a nationally representative survey of
+adults in the United States conducted since 1972. The GSS collects data
+on contemporary American society in order to monitor and explain trends
+in opinions, attitudes and behaviors. The GSS has adapted questions from
+earlier surveys, thereby allowing researchers to conduct comparisons for
+up to 80 years. More information can be found on the web site of the GSS
+project <https://gss.norc.org/About-The-GSS>
+
+GSS collects data using multi-stage survey design, which needs to be
+considered in order to generalize to the whole US population. To make my
+results **generalizable** I'm going to use the survey analysis library
+<https://cran.r-project.org/web/packages/survey/index.html>
+
+This is observational study so only **correlational inference** can be
+made.
+
+This particular dataset is not very good for analyzing numerical data -
+the study design intended to be categorical based (opinions, attitudes
+and behaviours trends). So even supposed to be numerical data like
+respondent's income is originally collected as categorical data and then
+post processed which imply inevitable loss of information. And second -
+the dataset is not large enough for in-depth (based on many
+sub-variables) analysis and inference.
+
+------------------------------------------------------------------------
+
+## Part 2: Research question
+
+#### Gender pay gap
+
+According to Bureau of Labor Statistics data, in 2020, women's annual
+earnings were 82.3% of men's, and the gap is even wider for many women
+of color. Though women only made 57 cents per dollar earned by men in
+1973 when this [Department of Labor
+PSA](https://www.youtube.com/watch?v=n00xZ_mKQgk%5d) was made, progress
+has stalled and we're still far from closing the pay gap.
+
+[Compared with white men with the same
+education](https://www.bls.gov/cps/demographics.htm#education), Black
+and Latina women with only a bachelor's degree have the largest gap at
+65%, and Black women with advanced degrees earn 70% of what white men
+with advanced degrees earn. Educational attainment is not enough to
+close gender earnings gaps. In fact, most women with advanced degrees
+earn less than white men, on average, with only a bachelor's degree.
+
+Unfortunately, the pandemic stalled gains made toward closing the pay
+gap, and layoffs and a lack of child care have forced many women out of
+the workforce entirely. In February 2021, women's labor force
+participation rate was 55.8% -- the same rate as April 1987. And women
+of color and those working in low-wage occupations [have been the most
+impacted](https://www.youtube.com/watch?v=xyX1cjxCG7g).
+
+From
+<https://blog.dol.gov/2021/03/19/5-facts-about-the-state-of-the-gender-pay-gap>
+
+I would like to see the general yearly dynamic in the gender pay gap as
+well as the influence of some other factors such as class, race and age
+on this dynamic. In my analysis I tried to select variables with the
+maximum available information across the dataset.
+
+-   **conrinc**
+
+> Inflation-adjusted personal income.
+
+> Notes: Income variables (INCOME, RINCOM77, RINCOM82, RINCOM86,
+> RINCOM91) are recoded in six-digit numbers and converted to 2000
+> dollars. The collapsed numbers above are for convenience of display
+> only. Since this variable is based on categorical data, **income is
+> not continuous**, but based on categorical mid-points and imputations.
+> For details see GSS Methodological Report No. 101.
+
+The data is not available for 2021.
+
+-   **sex**
+
+> The variable SEX in face-to-face interviews, interviewers
+> traditionally coded SEX based on interviewer observation
+
+-   **degree**
+
+> Respondent's degree
+
+-   **class**
+
+> If you were asked to use one of four names for your social class,
+> which would you say you belong in: the lower class, the working class,
+> the middle class, or the upper class?
+
+-   **race**
+
+> What race do you consider yourself?
+
+-   **age_group**
+
+arbitrary derivative from the variable `age`
+
+> Respondent's age
+
+------------------------------------------------------------------------
+
+## Part 3: Exploratory data analysis
+
+**Missing data**: 2010 data has no real information on `conrinc`
+variable, so I've decided not to use it in the analysis. Year 2021 has
+no `conrinc` variable.
+
+```{r conrinc_2010}
+gss_num %>% 
+  filter(year==2010,!is.na(conrinc)) %>% 
+  select(conrinc) %>% 
+  summary()
+
+```
+
+**Survey design**
+
+```{r desing_num}
+
+gss_num_design <-svydesign(id = ~vpsu, 
+                           strata = ~vstrat, 
+                           data = subset(gss_num, !is.na(conrinc) & year!=2010
+                                         & class!="no class"), 
+                           weights = ~wtssall, 
+                           nest = TRUE)
+
+#removing empty label for class = "no class"
+gss_num_design <- update(gss_num_design,class=droplevels(class))
+
+#requred for this particular design
+options(survey.lonely.psu="remove")
+```
+
+I'm going to create object using `srvyr` library to use lazy tidyverse
+syntax whenever I want to
+
+```{r srvyr_obj}
+
+gss_num_srvyr_design <- as_survey(gss_num_design)
+```
+
+### Income distribution
+
+Compare weighted and unweighted distribution
+
+```{r income_distr, fig.height=5}
+# Create a weighted histogram with ggplot
+gss_num %>%
+  na.omit() %>% 
+  ggplot() +
+    theme_light() +
+    geom_histogram( aes(x=conrinc,color = "Sample",fill = "Sample"), 
+                    binwidth = 7000, alpha=0.5) +
+    geom_histogram( aes(x=conrinc,weight=wtssall,color = "Population",fill = "Population"), 
+                    binwidth = 7000) +
+    labs(x = "Income") +
+    scale_color_manual(name = "Distribution", 
+                      values = c(
+                        "Sample" = "gold", 
+                        "Population" = "navy"
+                      )) +
+    scale_fill_manual(name = "Distribution", 
+                      values = c(
+                        "Sample" = "gold", 
+                        "Population" = "transparent"
+                      )) +
+  scale_x_continuous(labels = comma)
+```
+
+There is a noticeable difference in weighted and unweighted
+distribution. Without accounting for this difference results will be
+biased and variance calculated incorrectly, which can result in the
+wrong inference.
+
+**Summary statistics**
+
+```{r conrinc_summary}
+summary(gss_num$conrinc)
+```
+
+Distribution is very skewed. I would prefer to use median whenever
+possible.
+
+### **I**ncome distribution by gender
+
+```{r income_distr_s, fig.height=5}
+
+gss_num_srvyr_design %>% 
+  ggsurvey() +
+    theme_light() +
+    geom_histogram( aes(x=conrinc,color = sex,fill = sex), binwidth = 7000, alpha=0.5) +
+    labs(x = "Income") +
+    scale_x_continuous(labels = comma) +
+    scale_color_brewer(palette = "Set1")+
+    scale_fill_brewer(palette = "Set1") +
+    facet_wrap(~sex) 
+
+```
+
+### Survey-weighted medians
+
+#### Quantiles with 95% CI
+
+```{r conrinc_quantiles_des}
+svyquantile(x = ~conrinc, 
+            design = gss_num_design, 
+            na.rm = TRUE, 
+            quantiles = c(0.01, 0.25, 0.5, 0.75,0.99))
+```
+
+For `survey.design` objects the default is `interval.type="Wald"`. A 95%
+Wald confidence interval is constructed for the proportion below the
+estimated quantile. The inverse of the estimated CDF is used to map this
+to a confidence interval for the quantile.
+
+#### By gender
+
+-   Survey-weighted median income by `sex`
+
+```{r conrinc_s_median_table}
+# Compute the survey-weighted medians by sex
+svyby(formula = ~conrinc, 
+          by = ~sex, 
+          design = gss_num_design, 
+          FUN = svyquantile, 
+          na.rm = TRUE, 
+          quantiles = 0.5, 
+      ) 
+```
+
+Median income between genders differs. Variance is homogeneous across
+the groups.
+
+-   Survey-weighted median income by `sex` and `year` with 95% CI
+
+```{r conrinc_s_y_median}
+out_s <- svyby(formula = ~conrinc, 
+                    by = ~year+sex, 
+                    design = gss_num_design, 
+                    FUN = svyquantile,
+                    quantiles=0.5,
+                    na.rm = TRUE,
+                    ci=TRUE, vartype="ci"
+)
+
+# Construct a bar plot of average income by sex
+out_s %>% 
+  ggplot() +
+    aes(x = sex, y = conrinc, ymin = ci_l, ymax = ci_u, fill = sex) +
+    geom_col() +
+    geom_errorbar(width = 0.7) + 
+    theme_light() + 
+    scale_fill_brewer(palette = "Set2")+
+    labs(y="Median income") +
+    facet_wrap(~year) +
+    theme(axis.title.x=element_blank(),
+        axis.text.x=element_blank(),
+        axis.ticks.x=element_blank())
+
+```
+
+On this bar plot we can see that the median difference is getting
+smaller with years. To better see the dynamics I made a linear plot
+
+```{r conrinc_s_y_dyn, fig.height=4}
+out_s %>% 
+  ggplot() +
+  geom_line(aes(x=year, y=as.numeric(conrinc), color=sex),size=1) + 
+  theme_light()+
+  scale_color_brewer(palette = "Set1") +
+  labs(y="median income") 
+
+```
+
+#### By gender and degree
+
+If we look at the counts of cases in each group (`sex`+ `year`+`degree`)
+we can see that there is not enough data to make inference. But anyway
+it would be interesting to look at the graph.
+
+```{r conrinc_s_y_d_count}
+out_s_d_tot <- svytable(~sex+degree+year, design = gss_num_design)
+head(as.data.frame(out_s_d_tot))
+```
+
+Graph
+
+```{r conrinc_s_y_d_dyn, fig.height=6}
+
+out_s_d <- svyby(formula = ~conrinc, 
+                    by = ~year+sex+degree, 
+                    design = gss_num_design, 
+                    FUN = svyquantile,
+                    quantiles=0.5,
+                    na.rm = TRUE
+)
+
+out_s_d %>% 
+  ggplot() +
+    geom_smooth(aes(x=year, y=as.numeric(conrinc), color=sex),size=1) + 
+    theme_light()+
+    scale_color_brewer(palette = "Set1") +
+    labs(y="median income") +
+    facet_wrap(~degree)
+```
+
+We can see that dynamics is not homogeneous across the groups and
+variance in the graduate male group is too high.
+
+#### By gender and class
+
+If we look at the counts of cases in each group (`sex`+ `year`+`class`)
+we can see that there is not enough data to make inference.
+
+```{r conrinc_s_y_cl_count}
+out_s_cl_tot <- svytable(~sex+class+year, design = gss_num_design)
+head(as.data.frame(out_s_cl_tot))
+```
+
+Graph
+
+```{r conrinc_s_y_cl_dyn, fig.height=6}
+
+out_s_cl <- svyby(formula = ~conrinc, 
+                    by = ~year+sex+class, 
+                    design = gss_num_design, 
+                    FUN = svyquantile,
+                    quantiles=0.5,
+                    na.rm = TRUE
+)
+
+out_s_cl %>% 
+  ggplot() +
+    geom_smooth(aes(x=year, y=as.numeric(conrinc), color=sex),size=1) + 
+    theme_light()+
+    scale_color_brewer(palette = "Set1") +
+    labs(y="median income") +
+    facet_wrap(~class)
+```
+
+Yearly dynamics is very different for different socioeconomic classes -
+almost the same level for the low and working class, some difference in
+the middle class and too much variance in the upper class to make any
+conclusions.
+
+#### By gender and race
+
+If we look at the counts of cases in each group (`sex`+ `year`+`race`)
+we can see that there is not enough data to make inference.
+
+```{r conrinc_s_y_r_count}
+out_s_r_tot <- svytable(~sex+race+year, design = gss_num_design)
+head(as.data.frame(out_s_r_tot))
+```
+
+Graph
+
+```{r conrinc_s_y_r_dyn, fig.height=4}
+
+out_s_r <- svyby(formula = ~conrinc, 
+                    by = ~year+sex+race, 
+                    design = gss_num_design, 
+                    FUN = svyquantile,
+                    quantiles=0.5,
+                    na.rm = TRUE
+)
+
+out_s_r %>% 
+  ggplot() +
+    geom_smooth(aes(x=year, y=as.numeric(conrinc), color=sex),size=1) + 
+    theme_light()+
+    scale_color_brewer(palette = "Set1") +
+    labs(y="median income") +
+    facet_wrap(~race)
+```
+
+Way too much variance in the other race group (due to the lack of
+information in the dataset), but looking at the other two seems like the
+only privileged group now is white males.
+
+#### By gender and age
+
+If we look at the counts of cases in each group (`sex`+
+`year`+`age_group`) we can see that there is not enough data to make
+inference.
+
+```{r conrinc_s_y_age_count}
+out_s_age_tot <- svytable(~sex+age_group+year, design = gss_num_design)
+head(as.data.frame(out_s_age_tot))
+```
+
+Graph
+
+```{r conrinc_s_y_age_dyn, fig.height=6}
+
+out_s_age <- svyby(formula = ~conrinc, 
+                    by = ~year+sex+age_group, 
+                    design = gss_num_design, 
+                    FUN = svyquantile,
+                    quantiles=0.5,
+                    na.rm = TRUE
+)
+
+out_s_age %>% 
+  ggplot() +
+    geom_smooth(aes(x=year, y=as.numeric(conrinc), color=sex),size=1) + 
+    theme_light()+
+    scale_color_brewer(palette = "Set1") +
+    labs(y="median income") +
+    facet_wrap(~age_group)
+```
+
+Looks like since the 2000th in the middle aged groups things are not
+getting much better.
+
+## Part 4: Inference
+
+T-test and ANOVA inference is mean-based. Conditions for both are
+satisfied:
+
+-   independence - observations are independent between and within the
+    groups, data is not paired (from GSS survey design), sample size
+    \<10% of the population
+
+-   distribution of the data within each group is not normal, but sample
+    size is big enough.
+
+-   variability across the groups is about equal
+
+### T test
+
+H~0~: there is no difference between mean income of males and females
+$\mu_{male} = \mu_{female}$
+
+H~1~: there is a difference between mean income of males and females
+$\mu_{male} \neq \mu_{female}$
+
+```{r}
+##Inference for quantitative data ###Survey-weighted t-test
+svyttest(formula = conrinc~sex,
+         design = gss_num_design)
+
+
+```
+
+### ANOVA
+
+For each of the variable we have a pair of hypotheses
+
+H~0~: there is no difference between mean income
+$\mu_{1} = \mu_{2} = \mu_{...} =\mu_{i}$
+
+H~1~: there is a difference between mean income
+$\mu_{1} \neq \mu_{2} \neq \mu_{...} \neq \mu_{i}$
+
+To extract ANOVA table from survey design based model I have to use GLM
+model first.
+
+```{r conrinc_degree_anov_surv}
+# Extracting ANOVA table for income by degree and sex
+gss.glm1 <- svyglm(conrinc~sex+degree+race+class+age_group, design=gss_num_design)
+atable <- anova(gss.glm1)
+atable
+```
+
+Comparing to generic anova with `weights` parameter
+
+```{r conrinc_degree_anov_generic}
+atable2 <- aov(conrinc~degree+sex+race+class+age_group, data = gss_num, weights = wtssall)
+summary(atable2)
+```
+
+Both variants shows that all variables are significant with p-value
+approaching zero. Thus we can reject both H~0~ hypotheses.

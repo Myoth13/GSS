@@ -1,0 +1,148 @@
+---
+title: "Survey - categorical data"
+output: html_notebook
+---
+
+Survey design - (cluster VPSU; strata VSTRAT; weight WTSSPS /\* For years before 2021, use WTSSALL or WTSSNR \*/;)
+
+```{r}
+library(dplyr)
+library(ggplot2)
+library(survey)
+library(questionr)
+
+load("gss.RData")
+
+gss_design <-svydesign(id = ~vpsu, 
+                           strata = ~vstrat, 
+                           data = subset(gss,
+                                         class!="no class" &
+                                        !is.na(class)), 
+                           weights = ~wtssall, 
+                           nest = TRUE)
+
+gss_design <- update(gss_design,class=droplevels(class)) 
+
+head(gss_design)
+```
+
+Estimated population size. In this case weights are scaled to sample size
+
+```{r}
+gss %>% 
+  summarize(N_hat = sum(wtssall))
+```
+
+Number of strata
+
+```{r}
+gss %>%
+  summarize(n_starta = n_distinct(vstrat))
+```
+
+Number of clusters
+
+```{r}
+gss %>%
+  summarize(n_clusters = n_distinct(vstrat,vpsu))
+```
+
+Sample sizes in clusters
+
+```{r}
+gss %>%
+  count(vstrat,vpsu)
+```
+
+Construct a frequency table of Classes
+
+```{r}
+tab_cl <- svytable(~class, design = gss_design)
+tab_cl
+```
+
+Add proportions to table
+
+```{r}
+tab_cl <- tab_cl %>%
+  as.data.frame() %>%
+  mutate(Prop = Freq/sum(Freq))
+tab_cl
+```
+
+Create a barplot
+
+```{r}
+tab_cl %>% ggplot() + 
+  aes(x = class, y = Prop) +
+  theme(axis.text.x = element_text(size=11, angle = 90, vjust = 0.5, hjust=1)) +
+  geom_col()
+
+```
+
+Same plot using ggsurvey
+
+```{r}
+ggsurvey(gss_design) + 
+  aes(x = class) + 
+  theme(axis.text.x = element_text(size=11, angle = 90, vjust = 0.5, hjust=1)) +
+  geom_bar() 
+```
+
+Construct a frequency table of Classes + Health
+
+```{r}
+tab_cl_h <- svytable(~class+health, design = gss_design)
+tab_cl_h
+```
+
+Add conditional proportions to table
+
+```{r}
+tab_cl_h <- tab_cl_h %>%
+  as.data.frame() %>% 
+  group_by(class) %>% 
+  mutate(sum_class=sum(Freq),prop_health = Freq/sum_class) %>% 
+  ungroup()
+tab_cl_h
+```
+
+Create a segmented bar graph of the conditional proportions in tab_DH_cond
+
+```{r}
+tab_cl_h %>%  
+  ggplot() +
+    aes(x = class, y = prop_health, fill = health) + 
+    geom_col() + 
+    coord_flip()
+
+```
+
+ggsurvey variant
+
+```{r}
+gss_design %>%  
+  na.omit() %>% 
+  ggsurvey() + 
+    aes(x = class, fill = health) + 
+    geom_bar(position = "fill") +
+    coord_flip()
+```
+
+Summary for class + health
+
+```{r}
+options(survey.lonely.psu="remove")
+svytotal(x = ~interaction(class, health),
+                       design = gss_design,
+                       na.rm = TRUE)
+
+```
+
+Estimate the means for class + health
+
+```{r}
+svymean(x = ~interaction(class, health),
+                     design = gss_design,
+                     na.rm = TRUE)
+```

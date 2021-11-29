@@ -1,0 +1,577 @@
+---
+title: "Statistical inference - GSS survey analysis for health inequity"
+subtitle: "Part 1 - Categorical data"
+author: "Anna Loznevaia"
+date: "`r Sys.Date()`"
+output: 
+    html_document:
+      theme: journal
+      highlight: tango
+      toc: true
+      toc_float:
+        collapsed: false
+        smooth_scroll: true
+      toc_depth: 6
+      fig_width: 8
+      fig_height: 5
+      fig_caption: true
+bibliography: references.bib
+link-citations: true
+editor_options: 
+  markdown: 
+    wrap: 72
+---
+
+## Setup
+
+### Load packages
+
+```{r load-packages, message = FALSE}
+library(ggplot2)
+library(dplyr)
+library(tidyr)
+library(survey)
+library(srvyr)
+library(questionr)
+library(stringr)
+library(reshape2)
+library(ggpubr)
+```
+
+### Load data
+
+I've uploaded a cross-sectional survey file from GSS web site
+[\<https://gss.norc.org/get-the-data/stata/\>](https://gss.norc.org/get-the-data/stata/){.uri}
+and loaded the data to DB (you can get the transfer script DB_transfer.R
+from my github account). For the purpose of replicability of this
+project I created three light separate data files which can be easily
+downloaded (script for extracting data - DB_extract.R) - two for the
+years prior 2021 (categorical and numerical inference) and one for the
+year 2021.
+
+```{r load-data}
+load("gss2021.RData")
+load("gss.RData")
+```
+
+------------------------------------------------------------------------
+
+## Part 1: Data
+
+The General Social Survey (GSS) is a nationally representative survey of
+adults in the United States conducted since 1972. The GSS collects data
+on contemporary American society in order to monitor and explain trends
+in opinions, attitudes and behaviors. The GSS has adapted questions from
+earlier surveys, thereby allowing researchers to conduct comparisons for
+up to 80 years. More information can be found on the web site of the GSS
+project <https://gss.norc.org/About-The-GSS>
+
+To safeguard the health of staff and respondents during the COVID-19
+pandemic, the 2021 GSS data collection used a mail-to-web methodology
+instead of its traditional in-person interviews. Research and
+interpretation done using the data should take extra care to ensure the
+analysis reflects actual changes in public opinion and is not unduly
+influenced by the change in data collection methods. For more
+information on the 2021 GSS methodology and its implications, please
+visit <https://gss.norc.org/Get-The-Data>
+
+GSS collects data using multi-stage survey design, which needs to be
+considered in order to generalize to the whole US population. To make my
+results **generalizable** I'm going to use the survey analysis library
+<https://cran.r-project.org/web/packages/survey/index.html>
+
+This is observational study so only **correlational inference** can be
+made.
+
+------------------------------------------------------------------------
+
+## Part 2: Research question
+
+### Health inequity
+
+The bases for inequalities, or determinants of health, are many.
+Margaret Whitehead developed the concept of health equity adopted by
+EURO/WHO.
+
+Whitehead defines health inequities as "differences in health which are
+not only unnecessary and avoidable but, in addition, are considered
+unfair and unjust."
+
+According to Whitehead, health inequalities determined by these
+categories are more likely to be considered avoidable and unfair:
+
+-   health-damaging behavior in which the degree of choice of lifestyles
+    is severely restricted;
+
+-   exposure to unhealthy, stressful living and working conditions;
+
+-   inadequate access to essential health services and other basic
+    services;
+
+-   natural selection, or health-related social mobility, involving the
+    tendency for sick people to move down the social scale.
+    [@Carter-Pokras2002]
+
+Within the US healthcare system these differences have most convincingly
+been demonstrated across racial and ethnic lines (whites vs minorities);
+however, disparities based on other categorizations have also been
+described, including geography (urban vs rural), gender (male vs
+female), socioeconomic status (poor vs nonpoor), and age (nonelderly vs
+elderly).[@Gibbons2005]
+
+**COVID-19 impact.**
+
+Although the COVID‑19 virus infects those exposed indiscriminately,
+exposure risk and the severity of its health, social and economic
+impacts are not being felt equally.
+
+COVID‑19 and its containment measures have exacerbated current and
+created new vulnerabilities through three key mechanisms: unequal
+socioeconomic impacts arising from both the health effects of COVID‑19
+and their inequities and COVID‑19 containment measures; and the
+bidirectional effects between the unequal socioeconomic impacts of
+COVID‑19 and non-COVID‑19-related health inequities.
+<https://www.euro.who.int/en/health-topics/health-determinants/social-determinants/publications/2020/health-inequity-and-the-effects-of-covid19-2020>
+
+I'm going to look at the relationship between socioeconomic status
+(defined by **`class`** variable) and health (defined by **`health`**
+variable) using GSS cross-sectional data. Interesting question for me is
+how this trend changes over time and especially in the 2021 year data.
+
+-   **health**
+
+    Would you say your own health, in general, is excellent, good, fair,
+    or poor?
+
+-   **class**
+
+    If you were asked to use one of four names for your social class,
+    which would you say you belong in: the lower class, the working
+    class, the middle class, or the upper class?
+
+------------------------------------------------------------------------
+
+## Part 3: Exploratory data analysis
+
+Creating a survey design object using instructions from codebook:
+
+`cluster VPSU; strata VSTRAT; weight WTSSPS /* For years before 2021, use WTSSALL or WTSSNR */;`
+
+```{r design_gss}
+
+#for years prior 2021
+gss_a_design <-svydesign(id = ~vpsu, 
+                           strata = ~vstrat, 
+                           data = subset(gss, 
+                                         !is.na(class) & 
+                                         class!="no class" & 
+                                         !is.na(health)), 
+                           weights = ~wtssall, 
+                           nest = TRUE)
+
+#removing empty label for class = "no class"
+gss_a_design <- update(gss_a_design,class=droplevels(class))
+
+#for 2021
+gss2021_design <-svydesign(id = ~vpsu, 
+                           strata = ~vstrat, 
+                           data = subset(gss2021, 
+                                         !is.na(class) & 
+                                         class!="no class" & 
+                                         !is.na(health)), 
+                           weights = ~wtssnrps, 
+                           nest = TRUE)
+
+#requred for this particular design
+options(survey.lonely.psu="remove")
+```
+
+I'm going to create object using `srvyr` library to use lazy tidyverse
+syntax whenever I want to
+
+```{r srvyr_obj}
+
+gss_srvyr_design <- as_survey(gss_a_design)
+gss2021_srvyr_design <- as_survey(gss2021_design)
+```
+
+Instead of ggplot I'm using `ggsurvey` from the library `questionr` for
+some of the plots in this project. It should take care of weights
+mapping and scaling. I compared it with manual weights scaling + option
+"weight" in `ggplot` and didn't find any differences, so I will use it
+as a more succinct form.
+
+### Health distribution
+
+Compare weighted and Unweighted health distribution for year 2021
+
+```{r health_2021_distr_comparison, fig.height=3, fig.width=9}
+
+gss2021 %>%
+  na.omit() %>% 
+  ggplot() +
+  theme_light() +
+  geom_bar( aes(x=health,fill = "Sample")) +
+  geom_bar( aes(x=health,weight=wtssnrps,fill = "Population"), alpha=0.5) +
+  scale_fill_manual(name = "Distribution", 
+                     values = c(
+                       "Sample" = "#0072b2", 
+                       "Population" = "#e69f00"
+                        )) 
+```
+
+### Health distribution by class
+
+#### Raw contingency tables
+
+Unweighted amount of observations for main dataset (years prior to 2021)
+
+```{r health_counts_raw_all}
+
+gss %>%
+  filter(!is.na(health),!is.na(class),class!="no class") %>%
+  group_by(class,health) %>% 
+  count() %>% 
+  spread(key = health, value = n)
+
+
+```
+
+There are enough observations in each group to make inference by chi
+squared test
+
+**Contingency table for 2021**
+
+```{r health_counts_raw_2021}
+
+gss2021 %>%
+  filter(!is.na(health),!is.na(class)) %>%
+  group_by(class,health) %>% 
+  count() %>% 
+  spread(key = health, value = n)
+```
+
+We can notice that there are not enough observations in the upper-class
+& poor group to make inference based on the chi squared test.
+
+#### Design weighted tables
+
+We can see the difference with the original counts from the raw tables
+
+**Contingency table for the main dataset**
+
+```{r health_class_des}
+
+#header for contingency table
+gss_s <- subset(gss, select=c(class,health), !is.na(class) & class!="no class")
+gss_s <- droplevels(gss_s)
+rows <- sort(unique(gss_s$class))
+cols <- sort(unique(gss_s$health))
+
+#creating new tables with counts
+t_a <-svytotal(~interaction(health,class),design=gss_a_design)
+ftable(t_a, rownames=list(health=cols,class=rows))
+```
+
+**Contingency table for 2021**
+
+```{r health_class_des_2021}
+
+#creating new tables with counts
+t_2021 <-svytotal(~interaction(health,class),design=gss2021_design)
+ftable(t_2021, rownames=list(health=cols,class=rows))
+```
+
+It's even worse after accounting for weights, so we can not use the chi
+squared test for the year 2021 separately.
+
+### Health distribution by class and years
+
+```{r health_dist_class_year_all}
+
+#calculating percentages
+gss_srvyr_design <- gss_srvyr_design %>% 
+  group_by(year, class, health) %>% 
+  mutate(year_health_count = n()) %>% 
+  group_by(year,class) %>% 
+  mutate(proc_health_year = year_health_count/n())
+
+gss_srvyr_design %>% 
+  ggsurvey() + 
+  aes(x = year,y=proc_health_year,color=health) + 
+  geom_smooth(size=1) +
+  facet_wrap(~class) + 
+  theme_light() + 
+  scale_color_brewer(palette = "Set1") +
+  labs(y="Health proportion", x="")
+```
+
+**Health distribution by class 2021**
+
+```{r health_dist_class_2021, fig.height=3, fig.width=9}
+
+gss_srvyr_design %>% 
+  ggsurvey() + 
+  aes(x = class,fill=health) + 
+  geom_bar(position = "fill") +
+  labs(y = "Health proportion") +
+  coord_flip() + 
+  theme_light() +
+  scale_fill_brewer(palette = "Set2")
+```
+
+------------------------------------------------------------------------
+
+## Part 4: Inference
+
+### Chi squared
+
+Condition for inference using chi squared is satisfied only for the main
+dataset:
+
+-   independence - observations are independent between and within the
+    groups, data is not paired (from GSS survey design), sample size
+    \<10% of the population
+
+-   number of observations in each of the groups \>5.
+
+H~0~: distribution of health is independent of class, all variations is
+due to chance $\pi_{1} = \pi_{2}= \pi_{3}= \pi_{4}$
+
+H~1~: distribution of health is not independent of class
+$\pi_{1} \neq \pi_{2} \neq \pi_{3} \neq \pi_{4}$
+
+```{r health_class_chi}
+
+chi<-svychisq(~class + health, design = gss_a_design, statistic = 'Chisq')
+chi 
+```
+
+P-value is almost zero which allow us to reject H~0~ and conclude that
+distribution of health is not independent of the class
+
+### Mean + CI
+
+Estimated proportions and their 95% CI
+
+```{r health_class_mean}
+
+mean_tab <- svyby( formula = ~health,
+                   by = ~class,
+                   design = gss_a_design,
+                   FUN = svymean,
+                   na.rm = TRUE )
+
+#plot friendly dataset - from wide to long 
+
+colnames(mean_tab) <- c("class","excellent","good","fair","poor","se.excellent","se.good","se.fair","se.poor")
+dm1 <- melt(mean_tab[,c("class","excellent","good","fair","poor")], id=c("class"))
+dm2 <- melt(mean_tab[,c("class","se.excellent","se.good","se.fair","se.poor")], id=c("class"))
+colnames(dm1) <- c("class", "health", "p")
+dm2$variable <- str_replace(dm2$variable, "se.", "")
+colnames(dm2) <- c("class", "health", "se")
+mean_tab <- merge(dm1, dm2)
+
+mean_tab <- mean_tab %>%
+  mutate(p_l = p - 1.96*se, p_h = p + 1.96*se )
+mean_tab
+```
+
+```{r health_class_mean_CI}
+# Construct a bar plot of average income by sex
+mean_tab %>% 
+  ggplot() +
+    aes(x = health, y = p, ymin = p_l, ymax = p_h, fill = health) +
+    geom_col() +
+    geom_errorbar(width = 0.7) + 
+    theme_light() + 
+    scale_fill_brewer(palette = "Set2")+
+    labs(y="Mean health") +
+    facet_wrap(~class) +
+    theme(axis.title.x=element_blank(),
+        axis.text.x=element_blank(),
+        axis.ticks.x=element_blank())
+```
+
+### Statistic yearly dynamic
+
+This data isn't very reliable because some groups has less then 5
+observations but it is anyway interesting to look at. For each year I
+calculated 4 different types of statistic:
+
+The default (`statistic="F"`) is the Rao-Scott second-order correction.
+The p-values are computed with a Satterthwaite approximation to the
+distribution. The alternative `statistic="Chisq"` adjusts the Pearson
+chisquared statistic by a design effect estimate and then compares it to
+the chisquared distribution it would have under simple random sampling.
+The `statistic="Wald"` test is that proposed by Koch et al (1975) and
+used by the SUDAAN software package. It is a Wald test based on the
+differences between the observed cell counts and those expected under
+independence. The adjustment given by `statistic="adjWald"` reduces the
+statistic when the number of PSUs is small compared to the number of
+degrees of freedom of the test. Rao and Thomas (1990) compare these
+tests and find the adjustment beneficial. From
+<https://r-survey.r-forge.r-project.org/survey/html/svychisq.html>
+
+```{r class_year_dyn }
+years <- unique(gss$year)
+f_all <- NULL
+
+for (i in years) {
+  gss_design <-svydesign(id = ~vpsu, 
+                           strata = ~vstrat, 
+                           data = subset(gss, 
+                                          !is.na(class) & 
+                                          class!="no class" & 
+                                          year == i &
+                                          !is.na(health)), 
+                           weights = ~wtssall, 
+                           nest = TRUE)
+
+    gss_design <- update(gss_design,class= droplevels(class))
+    chi1<-svychisq(~class + health, design = gss_design, statistic = 'Chisq')
+    chi2<-svychisq(~class + health, design = gss_design, statistic = 'F')
+    chi3<-svychisq(~class + health, design = gss_design, statistic = 'Wald')
+    chi4<-svychisq(~class + health, design = gss_design, statistic = 'adjWald')
+    
+    df<-data.frame(year=i,
+                   Chisq_st = chi1$statistic,
+                   F_st = chi2$statistic,
+                   Wald_st = chi3$statistic,
+                   adjWald_st = chi4$statistic )
+    row.names(df) <- i
+    f_all <- rbind(f_all,df)
+}
+
+#adding 2021
+   chi1<-svychisq(~class + health, design = gss2021_design, statistic = 'Chisq')
+   chi2<-svychisq(~class + health, design = gss2021_design, statistic = 'F')
+   chi3<-svychisq(~class + health, design = gss2021_design, statistic = 'Wald')
+   chi4<-svychisq(~class + health, design = gss2021_design, statistic = 'adjWald')
+    
+    df<-data.frame(year=2021,
+                   Chisq_st = chi1$statistic,
+                   F_st = chi2$statistic,
+                   Wald_st = chi3$statistic,
+                   adjWald_st = chi4$statistic )
+    row.names(df) <- i
+    f_all <- rbind(f_all,df)
+
+f_all %>% 
+  ggplot() +
+    geom_line(aes(x=year,y=Chisq_st,color="Chisquared"),size=1) + 
+    geom_line(aes(x=year,y=2*F_st,color="2X Rao-Scott"),size=1) +
+    geom_line(aes(x=year,y=2*Wald_st,color="2X Wald"),size=1) +
+    geom_line(aes(x=year,y=2*adjWald_st,color = "2X adjusted Wald"),size=1)+
+    scale_color_manual(name = "statistics", 
+                     values = c(
+                       "Chisquared" = "#0072b2", 
+                       "2X Rao-Scott" = "#e69f00",
+                       "2X Wald" = "#56b4e9",
+                       "2X adjusted Wald" = "#cc79a7"
+                       )) +
+    geom_point(aes(x=year,y=Chisq_st)) +
+    geom_text(
+      aes(x=year,y=Chisq_st),
+      label=f_all$year, 
+      position = position_nudge(x = 1,y = -1),  
+      size=3
+    ) 
+```
+
+------------------------------------------------------------------------
+
+## Part 5: Opinion
+
+GSS provides a rich source of information about opinion trends. As a
+conclusion I would like to look at how the situation with health
+disparity is reflected in mass consciousness by one example:
+
+**natfare**
+
+> We are faced with many problems in this country, none of which can be
+> solved easily or inexpensively. I'm going to name some of these
+> problems, and for each one I'd like you to name some of these
+> problems, and for each one I'd like you to tell me whether you think
+> we're spending too much money on it, too little money, or about the
+> right amount. First (READ ITEM A) . . . are we spending too much, too
+> little, or about the right amount on (ITEM)? K. Welfare
+
+#### Distribution of the opinions about welfare spending
+
+```{r welfare_op }
+
+#plot 1 - all years prior 2020
+p1 <- gss_srvyr_design %>% 
+  na.omit() %>% 
+  ggsurvey() + 
+    aes(x = class, fill = natfare) + 
+    geom_bar(position = "fill") +
+    theme_light() + 
+    scale_color_brewer(palette = "Set1")+
+    theme(axis.title.x=element_blank(),legend.title = element_blank())
+
+#plot 2 - 2021 data
+p2 <- gss2021_srvyr_design %>% 
+  na.omit() %>% 
+  ggsurvey() + 
+    aes(x = class, fill = natfare) + 
+    geom_bar(position = "fill") +
+    theme_light() + 
+    scale_color_brewer(palette = "Set1")+
+    theme(axis.title.x=element_blank(),legend.title = element_blank()) 
+
+#arranging together
+ggarrange(
+  p1 + rremove("x.text") + rremove("grid"), 
+  p2 + rremove("grid"),
+  labels = c("Before 2020", "2021 dataset"), hjust=-0.5,
+  common.legend = TRUE, legend = "right", 
+  ncol = 1, nrow = 2 )
+
+```
+
+#### Trend by years
+
+```{r welfare_op_dyn, fig.height=4}
+
+#calculating percentages for the graph
+
+out_fare <- svyby(formula = ~natfare, 
+                    by = ~year, 
+                    design = gss_a_design, 
+                    FUN = svymean,
+                    na.rm = TRUE
+)
+
+#wide to long format
+colnames(out_fare) <- c("year","Too little","About right","Too much")
+out_fare <- melt(out_fare[,c("year","Too little","About right","Too much")], id=c("year"))
+colnames(out_fare) <- c("year","natfare","p")
+
+out_fare2021 <- svymean(x = ~natfare, design = gss2021_design, na.rm = TRUE )
+out_fare2021 <- as.data.frame(out_fare2021)
+out_fare2021$year <- 2021
+out_fare2021$natfare <- c("Too little","About right","Too much")
+out_fare2021 <- subset(out_fare2021, select = -c(SE) )
+colnames(out_fare2021) <- c("p","year","natfare")
+
+#combining all years
+out_fare_tot <- rbind(out_fare, out_fare2021)
+
+out_fare_tot %>% 
+  ggplot() +
+    aes(x=year, y=p, color=natfare) +
+    geom_line() + 
+    geom_point() +
+    theme_light()+
+    scale_color_brewer(palette = "Set1") +
+    labs(y="proportion",color="Welfare spending") +
+    theme(axis.title.x=element_blank())
+```
+
+I think it is getting better, but still while our planet facing
+ecological meltdown and COVID-19 pandemic is far from over - we will
+have to deal with the dire socioeconomic consequences in many years to
+come, a lot of non-essential (softly speaking) projects such as space
+tourism attract a lot of resources and public attention.
